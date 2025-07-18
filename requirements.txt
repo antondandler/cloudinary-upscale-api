@@ -6,3 +6,4 @@ pydantic
 requests
 supabase
 flask
+flask_cors
