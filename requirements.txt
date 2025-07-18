@@ -4,6 +4,3 @@ python-dotenv
 cloudinary
 pydantic
 requests
-supabase
-flask
-flask_cors
