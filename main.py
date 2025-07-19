@@ -78,10 +78,6 @@ async def upscale_artwork(data: UpscaleRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi import FastAPI
-
-app = FastAPI()
-
 @app.get("/ping")
 def ping():
     return {"status": "ok"}
