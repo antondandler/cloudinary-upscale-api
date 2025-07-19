@@ -53,8 +53,14 @@ async def upscale_artwork(data: UpscaleRequest):
             public_id=f"portreo_artworks/{data.request_id}",
             overwrite=True,
             transformation=[
-                {"width": 3000, "height": 3000, "crop": "limit", "quality": "auto"}
-            ]
+    {
+        "width": 3000,
+        "height": 3000,
+        "crop": "fit",
+        "quality": "auto",
+        "fetch_format": "png"
+    }
+]
         )
 
         # Nur relevante Felder zurückgeben
