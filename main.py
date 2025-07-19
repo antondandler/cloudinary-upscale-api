@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
@@ -6,41 +7,67 @@ import os
 
 app = FastAPI()
 
+# CORS erlauben (falls nötig)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Cloudinary Konfiguration (aus ENV)
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
-class ArtworkRequest(BaseModel):
+# Eingabemodell
+class UpscaleRequest(BaseModel):
     request_id: str
     preview_url: str
-    product_type: str  # "apparel" oder "poster"
+    product_type: str
 
 @app.post("/upscale")
-def upscale_artwork(data: ArtworkRequest):
+async def upscale_artwork(data: UpscaleRequest):
     try:
-        transformation = {
-            "apparel": "e_upscale,w_2500,h_2500,c_fit,q_100,f_png",
-            "poster": "e_upscale,w_3000,h_3000,c_fit,q_100,f_png"
-        }.get(data.product_type, "e_upscale,w_2500,h_2500,c_fit,q_100,f_png")
+        # Nur bestimmte Produkttypen upscalen
+        if data.product_type.lower() not in ["poster", "canvas", "framed_poster"]:
+            raise HTTPException(status_code=400, detail="Product type does not require upscaling")
 
-        upload_result = cloudinary.uploader.upload(
-            data.preview_url,
-            public_id=f"{data.request_id}_production",
-            folder="portreo_artworks_production",
-            transformation=transformation,
-            upload_preset="portreo_production",
-            tags=["upscaled", data.product_type]
+        # Datei herunterladen
+        import requests
+        from tempfile import NamedTemporaryFile
+
+        response = requests.get(data.preview_url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=422, detail="Failed to download preview image")
+
+        with NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            tmp.write(response.content)
+            tmp_path = tmp.name
+
+        # Upload mit Transformation (Upscaling)
+        result = cloudinary.uploader.upload(
+            tmp_path,
+            public_id=f"portreo_artworks/{data.request_id}",
+            overwrite=True,
+            transformation=[
+                {"width": 3000, "height": 3000, "crop": "limit", "quality": "auto"}
+            ]
         )
 
+        # Nur relevante Felder zurückgeben
         return {
-            "secure_url": upload_result["secure_url"],
-            "width": upload_result.get("width"),
-            "height": upload_result.get("height"),
-            "format": upload_result.get("format"),
-            "bytes": upload_result.get("bytes")
+            "secure_url": result["secure_url"],
+            "width": result["width"],
+            "height": result["height"],
+            "bytes": result["bytes"],
+            "format": result["format"],
+            "public_id": result["public_id"]
         }
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
